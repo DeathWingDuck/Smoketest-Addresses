@@ -1,0 +1,102 @@
+// Replace with your EasyPost API key
+const EASYPOST_API_KEY = 'YOUR_API_KEY';
+
+function verifyAddressesBatch() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const lastRow = sheet.getLastRow();
+  const startRow = 109;  // Starting from row 2 (assuming first row is headers)
+  const batchSize = 10; // Process 10 rows at a time
+  
+  for (let i = startRow; i <= lastRow; i += batchSize) {
+    const endRow = Math.min(i + batchSize - 1, lastRow); // Determine the last row for this batch
+    
+    const range = sheet.getRange(i, 1, endRow - i + 1, sheet.getLastColumn());
+    const values = range.getValues();
+    
+    for (let j = 0; j < values.length; j++) {
+      // Perform address verification here for each row in the batch
+      Logger.log('Processing row: ' + (i + j));
+      
+      // Call your address verification function and log results as needed
+      let address = {
+        street1: values[j][1],
+        street2: values[j][2],
+        city: values[j][3],
+        state: values[j][4],
+        zip: values[j][5]
+      };
+      
+      let { correctedAddress, errorInfo } = verifyAddressWithEasyPost(address);
+      
+      if (correctedAddress) {
+        sheet.getRange(i + j, 9).setValue(correctedAddress.street1);
+        sheet.getRange(i + j, 10).setValue(correctedAddress.street2);
+        sheet.getRange(i + j, 11).setValue(correctedAddress.city);
+        sheet.getRange(i + j, 12).setValue(correctedAddress.state);
+        sheet.getRange(i + j, 13).setValue(correctedAddress.zip);
+        sheet.getRange(i + j, 8).setValue("Successful");
+      } else {
+        sheet.getRange(i + j, 8).setValue("Invalid");
+        sheet.getRange(i + j, 14).setValue(errorInfo);
+      }
+    }
+  }
+}
+
+function verifyAddressWithEasyPost(address) {
+  const url = "https://api.easypost.com/v2/addresses";
+  const options = {
+    "method": "post",
+    "headers": {
+      "Authorization": "Bearer " + EASYPOST_API_KEY
+    },
+    "contentType": "application/json",
+    "payload": JSON.stringify({
+      "address": {
+        "street1": address.street1,
+        "street2": address.street2,
+        "city": address.city,
+        "state": address.state,
+        "zip": address.zip,
+        "country": "US"  // Specify the country
+      },
+      "verify": ["delivery"]
+    })
+  };
+  
+  try {
+    const response = UrlFetchApp.fetch(url, options);
+    const json = JSON.parse(response.getContentText());
+
+    Logger.log('Full API response: ' + JSON.stringify(json));
+
+    // Access the address properties directly from the response
+    if (json && json.street1) {
+      const deliveryVerification = json.verifications?.delivery || {};
+
+      if (deliveryVerification.success) {
+        Logger.log('Address is valid for USPS delivery.');
+        return {
+          correctedAddress: {
+            street1: json.street1,
+            street2: json.street2,
+            city: json.city,
+            state: json.state,
+            zip: json.zip
+          },
+          errorInfo: null // No error info if the address is valid
+        };
+      } else {
+        const errorDetails = deliveryVerification.messages ? deliveryVerification.messages.join(", ") : "Address verification failed.";
+        Logger.log('Verification failed: ' + errorDetails);
+        return { correctedAddress: null, errorInfo: errorDetails }; // Return error info
+      }
+    } else {
+      Logger.log('Address property is undefined in response: ' + JSON.stringify(json));
+      return { correctedAddress: null, errorInfo: "Invalid response structure." };
+    }
+  } catch (error) {
+    Logger.log('Error in verification: ' + error.message);
+    return { correctedAddress: null, errorInfo: error.message }; // Return error info
+  }
+}
