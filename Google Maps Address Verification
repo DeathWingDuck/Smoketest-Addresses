@@ -1,0 +1,69 @@
+function validateAddress(addressLine1, addressLine2, city, state, postalCode) {
+  var apiKey = 'YOUR_API_KEY'; // Your API key
+  var url = 'https://maps.googleapis.com/maps/api/geocode/json';
+
+  // Construct the full address
+  var address = addressLine1 + (addressLine2 ? ', ' + addressLine2 : '') + ', ' + city + ', ' + state + ' ' + postalCode;
+  Logger.log("Validating address: " + address);
+
+  // Build the request URL
+  var requestUrl = url + '?address=' + encodeURIComponent(address) + '&key=' + apiKey;
+
+  try {
+    var response = UrlFetchApp.fetch(requestUrl);
+    var json = JSON.parse(response.getContentText());
+
+    Logger.log("API Response: " + JSON.stringify(json));
+
+    // Check if the response contains results
+    if (json.status === "OK" && json.results.length > 0) {
+      var validatedAddress = json.results[0].formatted_address; // Get the validated address
+      Logger.log("Validated Address: " + validatedAddress);
+      
+      // Check if the validated address includes Address Line 1
+      if (validatedAddress.toLowerCase().includes(addressLine1.toLowerCase())) {
+        return "Valid: " + validatedAddress; // Address is considered valid
+      } else {
+        return "Invalid: Address does not match."; // Address does not match
+      }
+    } else {
+      return "Invalid Address: " + json.status; // Handle API response with no results
+    }
+  } catch (e) {
+    return "Error: " + e.message; // Handle exceptions
+  }
+}
+
+
+function validateAllAddresses() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var range = sheet.getDataRange();
+  var data = range.getValues();
+
+  var batchSize = 50; // Number of rows to process at a time
+  for (var startRow = 1; startRow < data.length; startRow += batchSize) {
+    var endRow = Math.min(startRow + batchSize, data.length);
+    for (var i = startRow; i < endRow; i++) {
+      var name = data[i][0];
+      var addressLine1 = data[i][1];
+      var addressLine2 = data[i][2];
+      var city = data[i][3];
+      var state = data[i][4];
+      var postalCode = data[i][5];
+
+      if (!addressLine1 || !city || !state || !postalCode) {
+        sheet.getRange(i + 1, 7).setValue("Invalid: Missing Required Fields");
+        continue;
+      }
+
+      var validationResult = validateAddress(addressLine1, addressLine2, city, state, postalCode);
+      sheet.getRange(i + 1, 7).setValue(validationResult);
+    }
+    // Optional: Pause between batches to reduce load
+    Utilities.sleep(500); // Sleep for half a second
+  }
+
+  Logger.log("Address validation completed");
+}
+
+
