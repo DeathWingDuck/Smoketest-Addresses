@@ -1,0 +1,7 @@
+// Use when you aren't sure if the cells are merged, clean data is the best
+
+function unmergeAllCells() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var range = sheet.getDataRange(); // Get the entire range of the sheet
+  range.breakApart(); // Unmerge all merged cells in the range
+}
